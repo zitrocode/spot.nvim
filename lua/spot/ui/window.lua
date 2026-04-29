@@ -1,54 +1,78 @@
-local config = require("spot.config")
+local state = require("spot.state")
 
 local M = {}
 
-local function center_col(width)
-  return math.floor((vim.o.columns - width) / 2)
-end
-
-function M.create(name, buf, enter, row, opts)
-  opts = opts or {}
-
-  local width = opts.width or config.options.windows.width
-  local border = opts.border or config.options.windows.border
-
-  return vim.api.nvim_open_win(buf, enter, {
+--- Open a floating window using a pre-computed geometry.
+---
+--- @param buf integer: buffer to display
+--- @param geometry spot.Layout.Geometry: position and size from `spot.ui.layout`
+--- @param opts spot.Window.Opts
+--- @return integer win
+function M.open(buf, geometry, opts)
+  return vim.api.nvim_open_win(buf, opts.enter or false, {
     relative = "editor",
-    row = row,
-    col = center_col(width),
-
-    width = width,
-    height = opts.height,
-    border = border,
+    row = geometry.row,
+    col = geometry.col,
+    width = geometry.width,
+    height = geometry.height,
+    border = "rounded",
     style = "minimal",
-
-    title = name,
+    title = opts.title,
   })
 end
 
-function M.link_close(parent_win, child_win)
-  vim.api.nvim_create_autocmd("WinClosed", {
-    pattern = tostring(parent_win),
+-- lifecycle
 
-    callback = function()
-      if vim.api.nvim_win_is_valid(child_win) then
-        vim.api.nvim_win_close(child_win, true)
-      end
-    end,
-  })
-end
-
+--- Close a window if it is still valid
+--- Silently does nothing when `win` is nil or already closed.
+--- Alson stops insert mode to avoid leaving the editor in an incosistent state.
+---
+--- @param win integer | nil
 M.close = function(win)
   if win and vim.api.nvim_win_is_valid(win) then
     vim.api.nvim_win_close(win, true)
   end
+
+  vim.cmd("stopinsert")
 end
 
-M.resize_to_content = function(win, count)
-  local height = math.max(1, math.min(count, 16))
-  vim.api.nvim_win_set_config(win, {
-    height = height,
+--- Link two windows so that closing `parent` automatically closes `child`.
+--- Uses a one-shot `WinClosed` autocmd scoped to `parent`'s handle.
+---
+--- @param parent integer
+--- @param child integer
+function M.link_close(parent, child)
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(parent),
+    once = true,
+    callback = function()
+      M.close(child)
+      state.set_open(false)
+    end,
   })
+end
+
+--- Resize a window's height, clamped to the configured maximum.
+---
+--- @param win integer
+--- @param entry_count integer: desired number of visible rows.
+M.resize = function(win, entry_count)
+  if not (win and vim.api.nvim_win_is_valid(win)) then
+    return
+  end
+
+  local max = require("spot.config").get().windows.max_height
+  local height = math.max(1, math.min(entry_count, max))
+  vim.api.nvim_win_set_config(win, { height = height })
+end
+
+--- Move focus to `win`
+---
+--- @param win integer | nil
+M.foucs = function(win)
+  if win and vim.api.nvim_win_is_valid(win) then
+    vim.api.nvim_set_current_win(win)
+  end
 end
 
 return M

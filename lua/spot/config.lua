@@ -1,36 +1,41 @@
 local M = {}
 
----@class spot.Config
+--- @type spot.Config
 M.defaults = {
   windows = {
-    width = 60,
-    max_results_height = 20,
-    border = "rounded",
+    width = 80,
+    max_height = 16,
   },
-  icons_enabled = false,
-  keymaps = {},
+
+  -- All sources registered automatically during setup().
+  sources = { "files" },
+
+  -- Fallback source when the query has no recognised prefix.
+  default_source = "files",
+
+  -- Prefix routing table.
+  prefixes = {},
 }
 
----@type spot.Config
-M.options = nil
+--- The resolved configuration produced by `setup()`.
+--- `nil` until `setup()` is called; `get()` falls back to `defaults`.
+---
+--- @type spot.Config | nil
+M._options = nil
 
----@param options? spot.Config
-function M.setup(options)
-  M.options = vim.tbl_deep_extend("force", {}, M.defaults, options or {})
+--- Apply user configuration on top of the defaults.
+---
+--- @param opts? spot.Config  Partial overrides; omitted keys keep their defaults.
+function M.setup(opts)
+  M._options = vim.tbl_deep_extend("force", {}, M.defaults, opts or {})
 end
 
----@param options? spot.Config
----@return spot.Config
-function M.extend(options)
-  return options and vim.tbl_deep_extend("force", {}, M.options, options) or M.options
+--- Return the active configuration, falling back to defaults if `setup()` has
+--- not been called yet.
+---
+--- @return spot.Config
+function M.get()
+  return M._options or M.defaults
 end
-
-setmetatable(M, {
-  __index = function(_, k)
-    if k == "options" then
-      return M.defaults
-    end
-  end,
-})
 
 return M
